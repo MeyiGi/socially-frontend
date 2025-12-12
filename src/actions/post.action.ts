@@ -1,140 +1,74 @@
 "use server";
 
-import prisma from "@/lib/prisma";
-import { getDbUserId } from "./user.action";
 import { revalidatePath } from "next/cache";
+import { getAuthToken } from "./auth.action";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+export async function getPosts() {
+  try {
+    const token = await getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_URL}/posts/`, {
+      method: "GET",
+      cache: "no-store",
+      headers,
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch posts from backend");
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error in getPosts:", error);
+    return [];
+  }
+}
 
 export async function createPost(content: string, image: string) {
   try {
-    const userId = await getDbUserId();
+    const token = await getAuthToken();
+    if (!token) return { success: false, error: "Unauthorized" };
 
-    if (!userId) return;
-
-    const post = await prisma.post.create({
-      data: {
-        content,
-        image,
-        authorId: userId,
+    const response = await fetch(`${API_URL}/posts/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`, 
       },
+      body: JSON.stringify({ content, image }),
     });
 
-    revalidatePath("/"); // purge the cache for the home page
-    return { success: true, post };
+    if (!response.ok) throw new Error("Backend failed to create post");
+
+    const newPost = await response.json();
+    revalidatePath("/");
+    return { success: true, post: newPost };
   } catch (error) {
     console.error("Failed to create post:", error);
     return { success: false, error: "Failed to create post" };
   }
 }
 
-export async function getPosts() {
-  try {
-    const posts = await prisma.post.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            username: true,
-          },
-        },
-        comments: {
-          include: {
-            author: {
-              select: {
-                id: true,
-                username: true,
-                image: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "asc",
-          },
-        },
-        likes: {
-          select: {
-            userId: true,
-          },
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true,
-          },
-        },
-      },
-    });
-
-    return posts;
-  } catch (error) {
-    console.log("Error in getPosts", error);
-    throw new Error("Failed to fetch posts");
-  }
-}
-
 export async function toggleLike(postId: string) {
   try {
-    const userId = await getDbUserId();
-    if (!userId) return;
+    const token = await getAuthToken();
+    if (!token) return { success: false, error: "Unauthorized" };
 
-    // check if like exists
-    const existingLike = await prisma.like.findUnique({
-      where: {
-        userId_postId: {
-          userId,
-          postId,
-        },
+    const response = await fetch(`${API_URL}/posts/${postId}/like`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
       },
     });
 
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { authorId: true },
-    });
+    if (!response.ok) throw new Error("Failed to toggle like");
 
-    if (!post) throw new Error("Post not found");
-
-    if (existingLike) {
-      // unlike
-      await prisma.like.delete({
-        where: {
-          userId_postId: {
-            userId,
-            postId,
-          },
-        },
-      });
-    } else {
-      // like and create notification (only if liking someone else's post)
-      await prisma.$transaction([
-        prisma.like.create({
-          data: {
-            userId,
-            postId,
-          },
-        }),
-        ...(post.authorId !== userId
-          ? [
-              prisma.notification.create({
-                data: {
-                  type: "LIKE",
-                  userId: post.authorId, // recipient (post author)
-                  creatorId: userId, // person who liked
-                  postId,
-                },
-              }),
-            ]
-          : []),
-      ]);
-    }
-
+    const data = await response.json();
     revalidatePath("/");
-    return { success: true };
+    return { success: true, liked: data.liked };
   } catch (error) {
     console.error("Failed to toggle like:", error);
     return { success: false, error: "Failed to toggle like" };
@@ -143,46 +77,23 @@ export async function toggleLike(postId: string) {
 
 export async function createComment(postId: string, content: string) {
   try {
-    const userId = await getDbUserId();
+    const token = await getAuthToken();
+    if (!token) return { success: false, error: "Unauthorized" };
 
-    if (!userId) return;
-    if (!content) throw new Error("Content is required");
-
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { authorId: true },
+    // Assumes Python has: POST /api/v1/posts/{id}/comments
+    const response = await fetch(`${API_URL}/posts/${postId}/comments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
     });
 
-    if (!post) throw new Error("Post not found");
+    if (!response.ok) throw new Error("Failed to create comment");
 
-    // Create comment and notification in a transaction
-    const [comment] = await prisma.$transaction(async (tx) => {
-      // Create comment first
-      const newComment = await tx.comment.create({
-        data: {
-          content,
-          authorId: userId,
-          postId,
-        },
-      });
-
-      // Create notification if commenting on someone else's post
-      if (post.authorId !== userId) {
-        await tx.notification.create({
-          data: {
-            type: "COMMENT",
-            userId: post.authorId,
-            creatorId: userId,
-            postId,
-            commentId: newComment.id,
-          },
-        });
-      }
-
-      return [newComment];
-    });
-
-    revalidatePath(`/`);
+    const comment = await response.json();
+    revalidatePath("/");
     return { success: true, comment };
   } catch (error) {
     console.error("Failed to create comment:", error);
@@ -192,21 +103,19 @@ export async function createComment(postId: string, content: string) {
 
 export async function deletePost(postId: string) {
   try {
-    const userId = await getDbUserId();
+    const token = await getAuthToken();
+    if (!token) return { success: false, error: "Unauthorized" };
 
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { authorId: true },
+    const response = await fetch(`${API_URL}/posts/${postId}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
     });
 
-    if (!post) throw new Error("Post not found");
-    if (post.authorId !== userId) throw new Error("Unauthorized - no delete permission");
+    if (!response.ok) throw new Error("Failed to delete post");
 
-    await prisma.post.delete({
-      where: { id: postId },
-    });
-
-    revalidatePath("/"); // purge the cache
+    revalidatePath("/");
     return { success: true };
   } catch (error) {
     console.error("Failed to delete post:", error);

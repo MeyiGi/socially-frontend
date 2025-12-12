@@ -1,198 +1,91 @@
 "use server";
 
-// import { auth } from "@clerk/nextjs/server";
-import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { getDbUserId } from "./user.action";
-import { auth } from "@clerk/nextjs/server";
+import { getAuthToken } from "./auth.action";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export async function getProfileByUsername(username: string) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { username: username },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        bio: true,
-        image: true,
-        location: true,
-        website: true,
-        createdAt: true,
-        _count: {
-          select: {
-            followers: true,
-            following: true,
-            posts: true,
-          },
-        },
-      },
+    const response = await fetch(`${API_URL}/users/${username}`, {
+        cache: "no-store"
     });
-
-    return user;
+    
+    if (!response.ok) return null;
+    return await response.json();
   } catch (error) {
-    console.error("Error fetching profile:", error);
-    throw new Error("Failed to fetch profile");
+    return null;
   }
 }
 
 export async function getUserPosts(userId: string) {
   try {
-    const posts = await prisma.post.findMany({
-      where: {
-        authorId: userId,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            image: true,
-          },
-        },
-        comments: {
-          include: {
-            author: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "asc",
-          },
-        },
-        likes: {
-          select: {
-            userId: true,
-          },
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+    const response = await fetch(`${API_URL}/users/${userId}/posts`, {
+        cache: "no-store"
     });
-
-    return posts;
+    if(!response.ok) throw new Error("Failed");
+    return await response.json();
   } catch (error) {
-    console.error("Error fetching user posts:", error);
-    throw new Error("Failed to fetch user posts");
+    return [];
   }
 }
 
 export async function getUserLikedPosts(userId: string) {
   try {
-    const likedPosts = await prisma.post.findMany({
-      where: {
-        likes: {
-          some: {
-            userId,
-          },
-        },
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            image: true,
-          },
-        },
-        comments: {
-          include: {
-            author: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "asc",
-          },
-        },
-        likes: {
-          select: {
-            userId: true,
-          },
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+    const response = await fetch(`${API_URL}/users/${userId}/likes`, {
+        cache: "no-store"
     });
-
-    return likedPosts;
+    if(!response.ok) throw new Error("Failed");
+    return await response.json();
   } catch (error) {
-    console.error("Error fetching liked posts:", error);
-    throw new Error("Failed to fetch liked posts");
+    return [];
   }
 }
 
 export async function updateProfile(formData: FormData) {
   try {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) throw new Error("Unauthorized");
+    const token = await getAuthToken();
+    if (!token) throw new Error("Unauthorized");
 
     const name = formData.get("name") as string;
     const bio = formData.get("bio") as string;
     const location = formData.get("location") as string;
     const website = formData.get("website") as string;
+    const image = formData.get("image") as string;
 
-    const user = await prisma.user.update({
-      where: { clerkId },
-      data: {
-        name,
-        bio,
-        location,
-        website,
-      },
+    const response = await fetch(`${API_URL}/auth/me`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ name, bio, location, website, image })
     });
 
-    revalidatePath("/profile");
+    if(!response.ok) throw new Error("Failed to update");
+
+    const user = await response.json();
+    revalidatePath(`/profile/${user.username}`);
+    revalidatePath("/");
     return { success: true, user };
   } catch (error) {
-    console.error("Error updating profile:", error);
     return { success: false, error: "Failed to update profile" };
   }
 }
 
-export async function isFollowing(userId: string) {
+export async function isFollowing(targetUserId: string) {
   try {
-    const currentUserId = await getDbUserId();
-    if (!currentUserId) return false;
+    const token = await getAuthToken();
+    if (!token) return false;
 
-    const follow = await prisma.follows.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: currentUserId,
-          followingId: userId,
-        },
-      },
+    const response = await fetch(`${API_URL}/users/${targetUserId}/is_following`, {
+        headers: { "Authorization": `Bearer ${token}` }
     });
 
-    return !!follow;
+    if(!response.ok) return false;
+    const data = await response.json();
+    return data.is_following;
   } catch (error) {
-    console.error("Error checking follow status:", error);
     return false;
   }
 }

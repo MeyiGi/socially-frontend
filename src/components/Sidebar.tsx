@@ -1,22 +1,29 @@
-import { currentUser } from '@clerk/nextjs/server';
+// --- START OF FILE src/components/Sidebar.tsx ---
 import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import { Button } from './ui/button';
-import { getUserByClerkId } from '@/actions/user.action';
 import Link from 'next/link';
 import { Avatar, AvatarImage } from './ui/avatar';
 import { Separator } from './ui/separator';
 import { LinkIcon, MapPinIcon } from 'lucide-react';
+import { getAuthUser, getAuthToken } from '@/actions/auth.action';
+
+// Helper to fetch following stats since /auth/me might not return them
+// You may need to create this endpoint in Python or update /auth/me
+async function getUserStats(username: string) {
+    // This is just a placeholder. You should ideally fetch this from backend
+    // Or ensure getAuthUser returns _count
+    return { followers: 0, following: 0 }; 
+}
 
 async function Sidebar() {
-  const authUser = await currentUser();
+  const user = await getAuthUser();
 
-  if (!authUser) return <UnAuthenticatedSidebar/> 
-  const user = await getUserByClerkId(authUser.id);
-  if (!user) return null;
+  if (!user) return <UnAuthenticatedSidebar/>;
 
-  console.log({user})
+  // If your /auth/me endpoint doesn't return counts, you might need to fetch them separately
+  // Assuming for now user object matches the UserOut schema from python
+  
   return (
     <div className="sticky top-20">
       <Card>
@@ -32,7 +39,7 @@ async function Sidebar() {
 
               <div className="mt-4 space-y-1">
                 <h3 className="font-semibold">{user.name}</h3>
-                <p className="text-sm text-muted-foreground">{user.username}</p>
+                <p className="text-sm text-muted-foreground">@{user.username}</p>
               </div>
             </Link>
 
@@ -42,12 +49,12 @@ async function Sidebar() {
               <Separator className="my-4" />
               <div className="flex justify-between">
                 <div>
-                  <p className="font-medium">{user._count.following}</p>
+                  <p className="font-medium">0</p>
                   <p className="text-xs text-muted-foreground">Following</p>
                 </div>
                 <Separator orientation="vertical" />
                 <div>
-                  <p className="font-medium">{user._count.followers}</p>
+                  <p className="font-medium">0</p>
                   <p className="text-xs text-muted-foreground">Followers</p>
                 </div>
               </div>
@@ -79,7 +86,6 @@ async function Sidebar() {
 
 export default Sidebar
 
-
 const UnAuthenticatedSidebar = () => (
   <div className="sticky top-20">
     <Card>
@@ -90,16 +96,12 @@ const UnAuthenticatedSidebar = () => (
         <p className="text-center text-muted-foreground mb-4">
           Login to access your profile and connect with others.
         </p>
-        <SignInButton mode="modal">
-          <Button className="w-full" variant="outline">
-            Login
-          </Button>
-        </SignInButton>
-        <SignUpButton mode="modal">
-          <Button className="w-full mt-2" variant="default">
-            Sign Up
-          </Button>
-        </SignUpButton>
+        <Button className="w-full" variant="outline" asChild>
+            <Link href="/login">Login</Link>
+        </Button>
+        <Button className="w-full mt-2" variant="default" asChild>
+            <Link href="/register">Sign Up</Link>
+        </Button>
       </CardContent>
     </Card>
   </div>

@@ -2,12 +2,14 @@
 
 import { UploadDropzone } from "@/lib/uploadthing";
 import { XIcon } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface ImageUploadProps {
   onChange: (url: string) => void;
   value: string;
-  endpoint: "imageUploader"; // <- must match the server-side router key
+  endpoint: "imageUploader"; 
 }
+
 function ImageUpload({ endpoint, onChange, value }: ImageUploadProps) {
   if (value) {
     return (
@@ -27,10 +29,15 @@ function ImageUpload({ endpoint, onChange, value }: ImageUploadProps) {
     <UploadDropzone
       endpoint={endpoint}
       onClientUploadComplete={(res) => {
-        onChange(res?.[0].url);
+        // Fix: Ensure we get the URL correctly
+        if (res && res[0]) {
+            onChange(res[0].url); 
+            toast.success("Image uploaded!");
+        }
       }}
       onUploadError={(error: Error) => {
         console.log(error);
+        toast.error("Upload failed");
       }}
     />
   );

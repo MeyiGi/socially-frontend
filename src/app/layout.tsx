@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
 import { Toaster } from "react-hot-toast";
+import { getAuthUser } from "@/actions/auth.action"; // Import your custom action
+import { UserProvider } from "@/components/UserProvider"; // Import new provider
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -20,29 +21,31 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Socially",
-  description: "A modern social media application powered by Next.js",
+  description: "A modern social media application",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Fetch user server-side
+  const user = await getAuthUser();
+
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {/* Wrap app in UserProvider */}
+          <UserProvider initialUser={user}>
             <div className="min-h-screen">
               <Navbar />
-
               <main className="py-8">
-                {/* container to center the content */}
                 <div className="max-w-7xl mx-auto px-4">
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <div className="hidden lg:block lg:col-span-3">
@@ -54,9 +57,9 @@ export default function RootLayout({
               </main>
             </div>
             <Toaster />
-          </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+          </UserProvider>
+        </ThemeProvider>
+      </body>
+    </html>
   );
 }

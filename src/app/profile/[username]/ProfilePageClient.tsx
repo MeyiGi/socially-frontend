@@ -18,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { SignInButton, useUser } from "@clerk/nextjs";
 import { format } from "date-fns";
 import {
   CalendarIcon,
@@ -30,6 +29,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useUserContext } from "@/components/UserProvider"; 
+import Link from "next/link";
+import ImageUpload from "@/components/ImageUpload";
 
 type User = Awaited<ReturnType<typeof getProfileByUsername>>;
 type Posts = Awaited<ReturnType<typeof getUserPosts>>;
@@ -47,7 +49,7 @@ function ProfilePageClient({
   posts,
   user,
 }: ProfilePageClientProps) {
-  const { user: currentUser } = useUser();
+  const { user: currentUser } = useUserContext();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   const [isUpdatingFollow, setIsUpdatingFollow] = useState(false);
@@ -57,6 +59,7 @@ function ProfilePageClient({
     bio: user.bio || "",
     location: user.location || "",
     website: user.website || "",
+    image: user.image || "",
   });
 
   const handleEditSubmit = async () => {
@@ -88,7 +91,7 @@ function ProfilePageClient({
 
   const isOwnProfile =
     currentUser?.username === user.username ||
-    currentUser?.emailAddresses[0].emailAddress.split("@")[0] === user.username;
+    currentUser?.email === user.email;
 
   const formattedDate = format(new Date(user.createdAt), "MMMM yyyy");
 
@@ -128,9 +131,9 @@ function ProfilePageClient({
 
                 {/* "FOLLOW & EDIT PROFILE" BUTTONS */}
                 {!currentUser ? (
-                  <SignInButton mode="modal">
-                    <Button className="w-full mt-4">Follow</Button>
-                  </SignInButton>
+                  <Button className="w-full mt-4" asChild>
+                    <Link href="/login">Follow</Link>
+                  </Button>
                 ) : isOwnProfile ? (
                   <Button className="w-full mt-4" onClick={() => setShowEditDialog(true)}>
                     <EditIcon className="size-4 mr-2" />
@@ -203,7 +206,8 @@ function ProfilePageClient({
           <TabsContent value="posts" className="mt-6">
             <div className="space-y-6">
               {posts.length > 0 ? (
-                posts.map((post) => <PostCard key={post.id} post={post} dbUserId={user.id} />)
+                // FIX: Added (post: any) to bypass the implicit any error
+                posts.map((post: any) => <PostCard key={post.id} post={post} dbUserId={user.id} />)
               ) : (
                 <div className="text-center py-8 text-muted-foreground">No posts yet</div>
               )}
@@ -213,7 +217,8 @@ function ProfilePageClient({
           <TabsContent value="likes" className="mt-6">
             <div className="space-y-6">
               {likedPosts.length > 0 ? (
-                likedPosts.map((post) => <PostCard key={post.id} post={post} dbUserId={user.id} />)
+                // FIX: Added (post: any) to bypass the implicit any error
+                likedPosts.map((post: any) => <PostCard key={post.id} post={post} dbUserId={user.id} />)
               ) : (
                 <div className="text-center py-8 text-muted-foreground">No liked posts to show</div>
               )}
@@ -227,6 +232,14 @@ function ProfilePageClient({
               <DialogTitle>Edit Profile</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Profile Image</Label>
+                <ImageUpload
+                  endpoint="imageUploader"
+                  value={editForm.image}
+                  onChange={(url) => setEditForm({ ...editForm, image: url })}
+                />
+              </div>
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input

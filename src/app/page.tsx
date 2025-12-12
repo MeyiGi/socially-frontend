@@ -1,34 +1,23 @@
-import ModeToggle from "@/components/ModeToggle";
 import React from "react";
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
-import { currentUser } from "@clerk/nextjs/server";
+import { getAuthUser } from "@/actions/auth.action"; // Use custom auth
 import CreatePost from "@/components/CreatePost";
 import WhoToFollow from "@/components/WhoToFollow";
 import PostCard from "@/components/PostCard";
 import { getPosts } from "@/actions/post.action";
 import { getDbUserId } from "@/actions/user.action";
 
-async function page() {
-  const user = await currentUser();
+export default async function Home() {
+  const user = await getAuthUser(); // Changed from currentUser()
   const posts = await getPosts();
   const dbUserId = await getDbUserId();
-
-  console.log({posts})
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
       <div className="lg:col-span-6">
         {user ? <CreatePost /> : null}
         <div className="space-y-6">
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} dbUserId={dbUserId}/>
+          {posts.map((post: any) => (
+            <PostCard key={post.id} post={post} dbUserId={dbUserId} />
           ))}
         </div>
       </div>
@@ -39,5 +28,3 @@ async function page() {
     </div>
   );
 }
-
-export default page;

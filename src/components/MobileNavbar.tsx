@@ -12,13 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { useAuth, SignInButton, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 import Link from "next/link";
+import { useUserContext } from "./UserProvider"; // Custom hook
+import { logoutUser } from "@/actions/auth.action";
 
 function MobileNavbar() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const { isSignedIn } = useAuth();
+  const { user } = useUserContext(); // Replaces useAuth/useUser
   const { theme, setTheme } = useTheme();
 
   return (
@@ -36,8 +37,7 @@ function MobileNavbar() {
 
       <Sheet open={showMobileMenu} onOpenChange={setShowMobileMenu}>
         <SheetTrigger asChild>
-          {/* ADD suppressHydrationWarning HERE 👇 */}
-          <Button variant="ghost" size="icon" suppressHydrationWarning>
+          <Button variant="ghost" size="icon">
             <MenuIcon className="h-5 w-5" />
           </Button>
         </SheetTrigger>
@@ -53,7 +53,7 @@ function MobileNavbar() {
               </Link>
             </Button>
 
-            {isSignedIn ? (
+            {user ? (
               <>
                 <Button variant="ghost" className="flex items-center gap-3 justify-start" asChild>
                   <Link href="/notifications">
@@ -62,24 +62,22 @@ function MobileNavbar() {
                   </Link>
                 </Button>
                 <Button variant="ghost" className="flex items-center gap-3 justify-start" asChild>
-                  <Link href="/profile">
+                  <Link href={`/profile/${user.username}`}>
                     <UserIcon className="w-4 h-4" />
                     Profile
                   </Link>
                 </Button>
-                <SignOutButton>
-                  <Button variant="ghost" className="flex items-center gap-3 justify-start w-full">
-                    <LogOutIcon className="w-4 h-4" />
-                    Logout
-                  </Button>
-                </SignOutButton>
+                <form action={logoutUser}>
+                    <Button variant="ghost" className="flex items-center gap-3 justify-start w-full">
+                        <LogOutIcon className="w-4 h-4" />
+                        Logout
+                    </Button>
+                </form>
               </>
             ) : (
-              <SignInButton mode="modal">
-                <Button variant="default" className="w-full">
-                  Sign In
-                </Button>
-              </SignInButton>
+              <Button variant="default" className="w-full" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
             )}
           </nav>
         </SheetContent>

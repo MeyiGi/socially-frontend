@@ -1,7 +1,7 @@
 "use client";
 
-import { createComment, deletePost, getPosts, toggleLike } from "@/actions/post.action";
-import { SignInButton, useUser } from "@clerk/nextjs";
+import { createComment, deletePost, toggleLike } from "@/actions/post.action";
+import { useUserContext } from "./UserProvider";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Card, CardContent } from "./ui/card";
@@ -13,29 +13,58 @@ import { Button } from "./ui/button";
 import { HeartIcon, LogInIcon, MessageCircleIcon, SendIcon } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 
-type Posts = Awaited<ReturnType<typeof getPosts>>;
-type Post = Posts[number];
+// Define a basic interface for the Post to help TypeScript
+// You can move this to a types file later
+interface PostProps {
+  id: string;
+  content: string;
+  image?: string;
+  createdAt: string | Date;
+  author: {
+    id: string;
+    name: string;
+    username: string;
+    image: string;
+  };
+  comments: any[];
+  likes: any[];
+  _count: {
+    likes: number;
+    comments: number;
+  };
+}
 
-function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
-  const { user } = useUser();
+function PostCard({ post, dbUserId }: { post: PostProps; dbUserId: string | null }) {
+  const { user } = useUserContext();
   const [newComment, setNewComment] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [hasLiked, setHasLiked] = useState(post.likes.some((like) => like.userId === dbUserId));
-  const [optimisticLikes, setOptmisticLikes] = useState(post._count.likes);
+  
+  // Explicitly type the state to boolean
+  const [hasLiked, setHasLiked] = useState<boolean>(
+    post.likes.some((like: any) => like.userId === dbUserId)
+  );
+  
+  // Explicitly type the state to number
+  const [optimisticLikes, setOptmisticLikes] = useState<number>(post._count.likes);
+  
   const [showComments, setShowComments] = useState(false);
 
   const handleLike = async () => {
     if (isLiking) return;
     try {
       setIsLiking(true);
-      setHasLiked((prev) => !prev);
-      setOptmisticLikes((prev) => prev + (hasLiked ? -1 : 1));
+      
+      // Fix: Add types to 'prev'
+      setHasLiked((prev: boolean) => !prev);
+      setOptmisticLikes((prev: number) => prev + (hasLiked ? -1 : 1));
+      
       await toggleLike(post.id);
     } catch (error) {
+      // Revert on error
       setOptmisticLikes(post._count.likes);
-      setHasLiked(post.likes.some((like) => like.userId === dbUserId));
+      setHasLiked(post.likes.some((like: any) => like.userId === dbUserId));
     } finally {
       setIsLiking(false);
     }
@@ -45,11 +74,9 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
     if (!newComment.trim() || isCommenting) return;
     try {
       setIsCommenting(true);
-      const result = await createComment(post.id, newComment);
-      if (result?.success) {
-        toast.success("Comment posted successfully");
-        setNewComment("");
-      }
+      await createComment(post.id, newComment);
+      toast.success("Comment posted");
+      setNewComment("");
     } catch (error) {
       toast.error("Failed to add comment");
     } finally {
@@ -62,10 +89,9 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
     try {
       setIsDeleting(true);
       const result = await deletePost(post.id);
-      if (result.success) toast.success("Post deleted successfully");
-      else throw new Error(result.error);
+      if (result.success) toast.success("Post deleted");
     } catch (error) {
-      toast.error("Failed to delete post");
+      toast.error("Failed to delete");
     } finally {
       setIsDeleting(false);
     }
@@ -99,7 +125,7 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
                   </div>
                 </div>
                 {/* Check if current user is the post author */}
-                {dbUserId === post.author.id && (
+                {user?.id === post.author.id && (
                   <DeleteAlertDialog isDeleting={isDeleting} onDelete={handleDeletePost} />
                 )}
               </div>
@@ -133,12 +159,12 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
                 <span>{optimisticLikes}</span>
               </Button>
             ) : (
-              <SignInButton mode="modal">
-                <Button variant="ghost" size="sm" className="text-muted-foreground gap-2">
+              <Button variant="ghost" size="sm" className="text-muted-foreground gap-2" asChild>
+                <Link href="/login">
                   <HeartIcon className="size-5" />
                   <span>{optimisticLikes}</span>
-                </Button>
-              </SignInButton>
+                </Link>
+              </Button>
             )}
 
             <Button
@@ -150,7 +176,7 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
               <MessageCircleIcon
                 className={`size-5 ${showComments ? "fill-blue-500 text-blue-500" : ""}`}
               />
-              <span>{post.comments.length}</span>
+              <span>{post.comments?.length || 0}</span>
             </Button>
           </div>
 
@@ -159,7 +185,7 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
             <div className="space-y-4 pt-4 border-t">
               <div className="space-y-4">
                 {/* DISPLAY COMMENTS */}
-                {post.comments.map((comment) => (
+                {post.comments?.map((comment: any) => (
                   <div key={comment.id} className="flex space-x-3">
                     <Avatar className="size-8 flex-shrink-0">
                       <AvatarImage src={comment.author.image ?? "/avatar.png"} />
@@ -184,7 +210,7 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
               {user ? (
                 <div className="flex space-x-3">
                   <Avatar className="size-8 flex-shrink-0">
-                    <AvatarImage src={user?.imageUrl || "/avatar.png"} />
+                    <AvatarImage src={user?.image || "/avatar.png"} />
                   </Avatar>
                   <div className="flex-1">
                     <Textarea
@@ -214,12 +240,12 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
                 </div>
               ) : (
                 <div className="flex justify-center p-4 border rounded-lg bg-muted/50">
-                  <SignInButton mode="modal">
-                    <Button variant="outline" className="gap-2">
+                  <Button variant="outline" className="gap-2" asChild>
+                    <Link href="/login">
                       <LogInIcon className="size-4" />
                       Sign in to comment
-                    </Button>
-                  </SignInButton>
+                    </Link>
+                  </Button>
                 </div>
               )}
             </div>
